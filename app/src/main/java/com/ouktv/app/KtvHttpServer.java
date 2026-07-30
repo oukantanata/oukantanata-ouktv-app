@@ -137,6 +137,18 @@ public class KtvHttpServer extends NanoWSD {
         return "http://" + host;
     }
 
+    /** QR codes must always point guests at the host's real LAN address —
+     *  never at 127.0.0.1, even if the request that generated the QR image
+     *  itself came from the host device's own WebView (which always talks
+     *  to 127.0.0.1 internally). */
+    private String resolveLanUrl() {
+        String ip = NetUtils.getLocalIpAddress();
+        if (ip != null && !ip.isEmpty()) {
+            return "http://" + ip + ":" + getListeningPort();
+        }
+        return "http://127.0.0.1:" + getListeningPort();
+    }
+
     // ---------- static / html ----------
 
     private Response serveAsset(String assetPath) {
@@ -261,7 +273,7 @@ public class KtvHttpServer extends NanoWSD {
             String code = path.substring("/qr-image/".length()).toUpperCase();
             JSONObject cfg = getConfigRow(db);
             String base = cfg.optString("base_path", "ktv");
-            String joinUrl = publicUrl + "/" + base + "#ktv=" + code + "&remote=1";
+            String joinUrl = resolveLanUrl() + "/" + base + "#ktv=" + code + "&remote=1";
             byte[] png = QrUtil.renderPng(joinUrl, 300);
             return newFixedLengthResponse(Response.Status.OK, "image/png", new ByteArrayInputStream(png), png.length);
         }
@@ -270,9 +282,9 @@ public class KtvHttpServer extends NanoWSD {
             String code = path.substring("/qr/".length()).toUpperCase();
             JSONObject cfg = getConfigRow(db);
             String base = cfg.optString("base_path", "ktv");
-            String joinUrl = publicUrl + "/" + base + "#ktv=" + code + "&remote=1";
+            String joinUrl = resolveLanUrl() + "/" + base + "#ktv=" + code + "&remote=1";
             JSONObject o = new JSONObject();
-            o.put("qr", publicUrl + "/api/qr-image/" + code);
+            o.put("qr", resolveLanUrl() + "/api/qr-image/" + code);
             o.put("url", joinUrl);
             return jsonResponse(o, 200);
         }
