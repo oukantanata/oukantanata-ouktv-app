@@ -15,7 +15,12 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Ported from server.ts's ytInnertubeSearch(). Still requires internet —
@@ -54,6 +59,8 @@ public class YoutubeSearch {
     private static final Map<String, CacheEntry> CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_TTL_MS = 5 * 60 * 1000;
 
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(6);
+
     public static JSONArray search(String query, String type) {
         return search(query, type, null);
     }
@@ -67,12 +74,24 @@ public class YoutubeSearch {
         List<JSONObject> merged = new ArrayList<>();
         LinkedHashSet<String> seenIds = new LinkedHashSet<>();
 
+        // Fire all priority-channel searches AND the general fallback search
+        // at the same time instead of one-by-one — this is the difference
+        // between ~1-2s total and 10-20s total for a genre search.
+        List<Future<JSONArray>> futures = new ArrayList<>();
         if (priorityChannels != null) {
             List<String> shuffled = new ArrayList<>(Arrays.asList(priorityChannels));
             Collections.shuffle(shuffled);
             for (String ch : shuffled) {
-                if (merged.size() >= 20) break;
-                JSONArray chResults = innertubeSearch(query + " " + ch + suffix, 3);
+                final String q = query + " " + ch + suffix;
+                futures.add(POOL.submit((Callable<JSONArray>) () -> innertubeSearch(q, 3)));
+            }
+        }
+        Future<JSONArray> generalFuture = POOL.submit((Callable<JSONArray>) () -> innertubeSearch(fullQuery, 20));
+
+        for (Future<JSONArray> f : futures) {
+            if (merged.size() >= 20) break;
+            try {
+                JSONArray chResults = f.get(6, TimeUnit.SECONDS);
                 for (int i = 0; i < chResults.length() && merged.size() < 20; i++) {
                     JSONObject r = chResults.optJSONObject(i);
                     if (r == null) continue;
@@ -81,19 +100,23 @@ public class YoutubeSearch {
                     seenIds.add(id);
                     merged.add(r);
                 }
-            }
+            } catch (Exception ignored) {}
         }
 
         if (merged.size() < 20) {
-            JSONArray general = innertubeSearch(fullQuery, 20);
-            for (int i = 0; i < general.length() && merged.size() < 20; i++) {
-                JSONObject r = general.optJSONObject(i);
-                if (r == null) continue;
-                String id = r.optString("id", "");
-                if (id.isEmpty() || seenIds.contains(id)) continue;
-                seenIds.add(id);
-                merged.add(r);
-            }
+            try {
+                JSONArray general = generalFuture.get(6, TimeUnit.SECONDS);
+                for (int i = 0; i < general.length() && merged.size() < 20; i++) {
+                    JSONObject r = general.optJSONObject(i);
+                    if (r == null) continue;
+                    String id = r.optString("id", "");
+                    if (id.isEmpty() || seenIds.contains(id)) continue;
+                    seenIds.add(id);
+                    merged.add(r);
+                }
+            } catch (Exception ignored) {}
+        } else {
+            generalFuture.cancel(true);
         }
 
         JSONArray out = new JSONArray();
@@ -147,8 +170,8 @@ public class YoutubeSearch {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
             conn.setDoOutput(true);
 
             JSONObject ctx = new JSONObject();
