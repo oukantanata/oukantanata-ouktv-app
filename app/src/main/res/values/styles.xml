@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.OUKTV" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ouktv_pink</item>
+        <item name="colorPrimaryDark">@color/ouktv_pink</item>
+        <item name="colorAccent">@color/ouktv_pink</item>
+        <item name="android:windowBackground">@color/ouktv_bg</item>
+        <item name="android:statusBarColor">@color/ouktv_pink</item>
+    </style>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Cleartext (plain HTTP) is only used to talk to the app's own
+         embedded local server on 127.0.0.1 / the phone's LAN address.
+         All external calls (YouTube search, thumbnails) stay HTTPS. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
