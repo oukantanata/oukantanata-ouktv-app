@@ -1120,6 +1120,14 @@ html.bg-space body > *:not(#space-bg-canvas) { position: relative; z-index: 1; }
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; background: var(--player-idle-grad); color: #fff;
 }
+.player-error-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; background: var(--player-idle-grad); color: #fff;
+  padding: 24px; text-align: center; z-index: 5;
+}
+.player-error-overlay.hidden { display: none; }
+.player-error-overlay .idle-sub { max-width: 320px; }
+.player-error-actions { display: flex; gap: 10px; margin-top: 16px; }
 .idle-icon { font-size: 48px; margin-bottom: 12px; color: var(--accent); opacity: 0.8; }
 .idle-icon svg { width: 56px; height: 56px; }
 .idle-sub { font-size: 13px; opacity: 0.7; margin-top: 4px; }
@@ -12274,6 +12282,15 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           <p>No song playing</p>
           <p class="idle-sub">Search and add a song below to start!</p>
         </div>
+        <div id="player-error-overlay" class="player-error-overlay hidden">
+          <div class="idle-icon" data-icon="mic"></div>
+          <p>This video can't play here</p>
+          <p class="idle-sub">The channel has embedding turned off. You can watch it in the YouTube app instead, or skip to the next song.</p>
+          <div class="player-error-actions">
+            <button id="player-error-youtube-btn" class="btn btn-primary btn-sm">Open in YouTube</button>
+            <button id="player-error-skip-btn" class="btn btn-secondary btn-sm">Skip Song</button>
+          </div>
+        </div>
         <div class="host-player-controls">
           <button id="pip-btn" class="host-ctrl-btn" title="Floating (Picture-in-Picture)"></button>
           <button id="fullscreen-btn" class="host-ctrl-btn" title="Fullscreen" data-icon="expand"></button>
@@ -13083,11 +13100,13 @@ function maybeStartPlayer() {
   if (!currentKTV || !currentKTV.nowPlaying) {
     if (ytPlayer) { try { ytPlayer.destroy(); } catch {} ytPlayer = null; }
     $('#player-idle').classList.remove('hidden');
+    $('#player-error-overlay').classList.add('hidden');
     $('#now-playing-bar').classList.add('hidden');
     return;
   }
   const v = currentKTV.nowPlaying;
   $('#player-idle').classList.add('hidden');
+  $('#player-error-overlay').classList.add('hidden');
   $('#now-playing-bar').classList.remove('hidden');
   $('#np-title').textContent = v.title;
   $('#np-by').textContent = 'Added by ' + (v.requester || 'guest');
@@ -13107,10 +13126,8 @@ function maybeStartPlayer() {
           }
         },
         onError: (e) => {
-          if (e.data === 150 || e.data === 101 || e.data === 100) {
-            $('#np-title').textContent = 'Video unavailable — skipping...';
-            setTimeout(() => { if (ws) sendAction({ type: 'next', code: currentKTV.code }); }, 2000);
-          }
+          console.log('[YT-ERROR] host player error code:', e.data);
+          showPlayerErrorOverlay(v.youtube_id);
         },
       },
     });
@@ -13119,6 +13136,26 @@ function maybeStartPlayer() {
     ytPlayer.loadVideoById(v.youtube_id);
   }
 }
+
+function showPlayerErrorOverlay(youtubeId) {
+  try { if (ytPlayer) ytPlayer.stopVideo(); } catch {}
+  const overlay = $('#player-error-overlay');
+  overlay.classList.remove('hidden');
+  overlay.dataset.videoId = youtubeId;
+}
+$('#player-error-youtube-btn').addEventListener('click', () => {
+  const id = $('#player-error-overlay').dataset.videoId;
+  if (!id) return;
+  if (window.AndroidBridge && window.AndroidBridge.openInYoutube) {
+    window.AndroidBridge.openInYoutube(id);
+  } else {
+    window.open('https://www.youtube.com/watch?v=' + id, '_blank');
+  }
+});
+$('#player-error-skip-btn').addEventListener('click', () => {
+  $('#player-error-overlay').classList.add('hidden');
+  if (ws && currentKTV) sendAction({ type: 'next', code: currentKTV.code });
+});
 
 // ---------- Video.js Player ----------
 function checkVjsReady() {
@@ -14491,10 +14528,9 @@ function maybeStartRemotePlayer(r) {
         onReady: (e) => { try { e.target.mute(); e.target.playVideo(); } catch {} },
         onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) { if (ws) sendAction({ type: 'next', code: currentKTV.code }); } },
         onError: (e) => {
-          if (e.data === 150 || e.data === 101 || e.data === 100) {
-            const idle = document.getElementById('remote-player-idle');
-            if (idle) { idle.classList.remove('hidden'); idle.innerHTML = `<div class="idle-icon">${ICON.mic}</div><p>Preview not available</p><p class="idle-sub">Video doesn't allow embedding — host is still playing</p>`; }
-          }
+          console.log('[YT-ERROR] remote player error code:', e.data);
+          const idle = document.getElementById('remote-player-idle');
+          if (idle) { idle.classList.remove('hidden'); idle.innerHTML = `<div class="idle-icon">${ICON.mic}</div><p>Preview not available</p><p class="idle-sub">Video doesn't allow embedding — host is still playing</p>`; }
         },
       },
     });
