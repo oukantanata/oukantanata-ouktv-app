@@ -22,7 +22,7 @@ import java.util.TimeZone;
 public class Db extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "ktv.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     public Db(Context ctx) {
         super(ctx, DB_NAME, null, DB_VERSION);
@@ -54,6 +54,9 @@ public class Db extends SQLiteOpenHelper {
                 "footer_link3_text TEXT NOT NULL DEFAULT ''," +
                 "footer_link3_url TEXT NOT NULL DEFAULT ''," +
                 "footer_qr TEXT NOT NULL DEFAULT ''," +
+                "background_style TEXT NOT NULL DEFAULT 'default'," +
+                "landing_headline TEXT NOT NULL DEFAULT ''," +
+                "landing_subtext TEXT NOT NULL DEFAULT ''," +
                 "admin_password_hash TEXT NOT NULL DEFAULT ''," +
                 "updated_at TEXT NOT NULL)");
 
@@ -117,7 +120,11 @@ public class Db extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // No migrations yet — first version.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE ktv_config ADD COLUMN background_style TEXT NOT NULL DEFAULT 'default'");
+            db.execSQL("ALTER TABLE ktv_config ADD COLUMN landing_headline TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE ktv_config ADD COLUMN landing_subtext TEXT NOT NULL DEFAULT ''");
+        }
     }
 
     // ---------- helpers ----------

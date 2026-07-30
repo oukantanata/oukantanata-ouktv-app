@@ -973,19 +973,42 @@ button:active,
 .tab-content.active { display: block; }
 
 /* ===== Search ===== */
+#space-bg-canvas {
+  display: none;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 0%, #171a35 0%, #05050f 70%);
+}
+html.bg-space #space-bg-canvas { display: block; }
+html.bg-space body > *:not(#space-bg-canvas) { position: relative; z-index: 1; }
+
 .search-bar { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
-.genre-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.genre-pills {
+  display: flex;
+  gap: 5px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.genre-pills::-webkit-scrollbar { display: none; }
 .genre-pill {
   border: 1.5px solid var(--border, #e2e2e2);
   background: #fff;
   color: #555;
   border-radius: 999px;
-  padding: 7px 16px;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .genre-pill:hover { border-color: var(--accent); color: var(--accent); }
 .genre-pill.active {
@@ -11983,6 +12006,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 });</script>
 </head>
 <body>
+<canvas id="space-bg-canvas"></canvas>
 <div id="app">
 
 <!-- ============ LANDING / LOGIN SCREEN ============ -->
@@ -12523,6 +12547,24 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           <button id="preview-anim" class="btn btn-secondary" style="flex:1">Preview</button>
           <button id="save-refresh-anim" class="btn btn-primary" style="flex:1">Save Animation</button>
         </div>
+      </div>
+      <div class="admin-section">
+        <h3>Background Style</h3>
+        <p style="font-size:12px;color:#999;margin-bottom:8px">Choose the background used across every screen.</p>
+        <select id="cfg-background-style" class="admin-select">
+          <option value="default">Default — theme background</option>
+          <option value="space">Space — animated starfield</option>
+        </select>
+        <button id="save-background-style" class="btn btn-primary btn-block" style="margin-top:8px">Save Background</button>
+      </div>
+      <div class="admin-section">
+        <h3>Landing Page Text</h3>
+        <p style="font-size:12px;color:#999;margin-bottom:8px">Leave blank to use the default wording.</p>
+        <label>Headline</label>
+        <input type="text" id="cfg-landing-headline" placeholder="QUEUE KARAOKE SONGS FROM ANY PHONE.">
+        <label>Subtext</label>
+        <input type="text" id="cfg-landing-subtext" placeholder="Guests scan a ktv code, search songs, and add them instantly.">
+        <button id="save-landing-text" class="btn btn-primary btn-block" style="margin-top:8px">Save Landing Text</button>
       </div>
       <div class="admin-section">
         <h3>Video Player</h3>
@@ -13326,6 +13368,64 @@ function applyBranding(cfg) {
   const htag = $('#home-app-tagline');
   if (htag) htag.textContent = (cfg.app_tagline || '').toUpperCase();
   if (cfg.email_login_enabled) $('#login-screen').classList.remove('hidden');
+
+  // Custom landing headline/subtext (falls back to the default copy if unset)
+  const headlines = document.querySelectorAll('.landing-headline');
+  const subtexts = document.querySelectorAll('.landing-subtext');
+  if (cfg.landing_headline) headlines.forEach(el => el.innerHTML = cfg.landing_headline);
+  if (cfg.landing_subtext) subtexts.forEach(el => el.textContent = cfg.landing_subtext);
+
+  applyBackgroundStyle(cfg.background_style);
+}
+
+// ---------- Optional animated space background ----------
+let _spaceBgStarted = false;
+function applyBackgroundStyle(style) {
+  const isSpace = style === 'space';
+  document.documentElement.classList.toggle('bg-space', isSpace);
+  if (isSpace && !_spaceBgStarted) {
+    _spaceBgStarted = true;
+    startSpaceBackground();
+  }
+}
+function startSpaceBackground() {
+  const canvas = $('#space-bg-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w, h, stars;
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    const count = Math.floor((w * h) / 3000);
+    stars = Array.from({ length: count }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 1.4 + 0.3,
+      speed: Math.random() * 0.15 + 0.02,
+      twinkle: Math.random() * Math.PI * 2,
+    }));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  function frame() {
+    if (!document.documentElement.classList.contains('bg-space')) {
+      requestAnimationFrame(frame);
+      return;
+    }
+    ctx.clearRect(0, 0, w, h);
+    for (const s of stars) {
+      s.y += s.speed;
+      if (s.y > h) { s.y = 0; s.x = Math.random() * w; }
+      s.twinkle += 0.03;
+      const alpha = 0.5 + Math.sin(s.twinkle) * 0.5;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 }
 function showLogin() { hide('home-screen'); hide('ktv-screen'); show('login-screen'); }
 
@@ -14158,8 +14258,9 @@ function updateRemoteToggleUI() {
 // Initialize the remote search button to show the correct mode on page load
 updateRemoteToggleUI();
 
-async function doRemoteSearch() {
-  const q = $('#remote-song-search').value.trim();
+async function doRemoteSearch(overrideQuery) {
+  const typedQ = $('#remote-song-search').value.trim();
+  const q = (overrideQuery !== undefined ? overrideQuery : typedQ).trim();
   if (!q) return;
   const type = remoteSearchType;
   const genre = remoteGenre || 'all';
@@ -14190,8 +14291,8 @@ let remoteGenre = 'all';
     p.classList.add('active');
     remoteGenre = p.dataset.genre;
     const input = $('#remote-song-search');
-    if (!input.value.trim()) input.value = p.dataset.genre === 'all' ? 'karaoke' : p.textContent.trim();
-    doRemoteSearch();
+    const q = input.value.trim() || 'karaoke';
+    doRemoteSearch(q);
   }));
 })();
 $('#remote-song-search').addEventListener('blur', () => { setTimeout(scheduleRemoteSearchAutoClose, 200); });
@@ -14563,8 +14664,9 @@ function updateLiveSearchToggleUI() {
   }
 }
 
-async function doKTVSearch() {
-  const q = $('#ktv-song-search').value.trim();
+async function doKTVSearch(overrideQuery) {
+  const typedQ = $('#ktv-song-search').value.trim();
+  const q = (overrideQuery !== undefined ? overrideQuery : typedQ).trim();
   if (!q) return;
   const type = ktvSearchType;
   const genre = ktvGenre || 'all';
@@ -14592,8 +14694,8 @@ let ktvGenre = 'all';
     p.classList.add('active');
     ktvGenre = p.dataset.genre;
     const input = $('#ktv-song-search');
-    if (!input.value.trim()) input.value = p.dataset.genre === 'all' ? 'karaoke' : p.textContent.trim();
-    doKTVSearch();
+    const q = input.value.trim() || 'karaoke';
+    doKTVSearch(q);
   }));
 })();
 // Show/hide moving placeholder for host search bar
@@ -14792,6 +14894,9 @@ async function openAdminPanel() {
   $('#cfg-default-skin').value = cfg.default_skin || 'default';
   $('#cfg-refresh-animation').value = cfg.refresh_animation || 'fall';
   $('#cfg-video-player').value = cfg.video_player || 'youtube';
+  $('#cfg-background-style').value = cfg.background_style || 'default';
+  $('#cfg-landing-headline').value = cfg.landing_headline || '';
+  $('#cfg-landing-subtext').value = cfg.landing_subtext || '';
   $('#cfg-footer-credit').value = cfg.footer_credit || '';
   $('#cfg-footer-support').value = cfg.footer_support || '';
   $('#cfg-footer-link1-text').value = cfg.footer_link1_text || '';
@@ -14845,6 +14950,30 @@ $('#save-video-player').addEventListener('click', async () => {
     playerEngine = p;
     CONFIG.video_player = p;
     alert('Video player saved: ' + $('#cfg-video-player option:checked').textContent + '\n\nReload the page for the change to take effect on all displays.');
+  } catch (e) { alert('Failed to save: ' + (e.message || 'unknown error')); }
+});
+
+// Save background style choice to server config
+$('#save-background-style').addEventListener('click', async () => {
+  const style = $('#cfg-background-style').value;
+  try {
+    await api('/admin/config', { method: 'POST', body: JSON.stringify({ background_style: style }) });
+    CONFIG.background_style = style;
+    applyBackgroundStyle(style);
+    alert('Background style saved: ' + $('#cfg-background-style option:checked').textContent);
+  } catch (e) { alert('Failed to save: ' + (e.message || 'unknown error')); }
+});
+
+// Save landing page headline/subtext text to server config
+$('#save-landing-text').addEventListener('click', async () => {
+  const headline = $('#cfg-landing-headline').value.trim();
+  const subtext = $('#cfg-landing-subtext').value.trim();
+  try {
+    await api('/admin/config', { method: 'POST', body: JSON.stringify({ landing_headline: headline, landing_subtext: subtext }) });
+    CONFIG.landing_headline = headline;
+    CONFIG.landing_subtext = subtext;
+    applyBranding(CONFIG);
+    alert('Landing page text saved and applied.');
   } catch (e) { alert('Failed to save: ' + (e.message || 'unknown error')); }
 });
 

@@ -388,6 +388,9 @@ public class KtvHttpServer extends NanoWSD {
         o.put("footer_link3_text", c.optString("footer_link3_text"));
         o.put("footer_link3_url", c.optString("footer_link3_url"));
         o.put("footer_qr", c.optString("footer_qr"));
+        o.put("background_style", c.optString("background_style", "default"));
+        o.put("landing_headline", c.optString("landing_headline"));
+        o.put("landing_subtext", c.optString("landing_subtext"));
 
         JSONObject buttons = new JSONObject();
         buttons.put("live_music", c.optInt("show_live_music_button") != 0);
@@ -693,7 +696,8 @@ public class KtvHttpServer extends NanoWSD {
             String[] allowed = {"app_name", "app_tagline", "base_path", "default_theme", "default_skin",
                     "refresh_animation", "video_player", "footer_credit", "footer_support",
                     "footer_link1_text", "footer_link1_url", "footer_link2_text", "footer_link2_url",
-                    "footer_link3_text", "footer_link3_url"};
+                    "footer_link3_text", "footer_link3_url", "background_style", "landing_headline",
+                    "landing_subtext"};
             String[] boolKeys = {"show_live_music_button", "show_search_button", "show_queue_button",
                     "show_popular_button", "show_mysongs_button", "email_login_enabled"};
             StringBuilder sql = new StringBuilder("UPDATE ktv_config SET updated_at=?");
