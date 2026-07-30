@@ -252,8 +252,9 @@ public class KtvHttpServer extends NanoWSD {
         if (path.startsWith("/search") && session.getMethod() == Method.GET) {
             String q = firstParam(session, "q", "");
             String type = firstParam(session, "type", "karaoke");
+            String genre = firstParam(session, "genre", "");
             if (q.isEmpty()) return jsonResponse(new JSONArray(), 200);
-            return jsonResponse(YoutubeSearch.search(q, type), 200);
+            return jsonResponse(YoutubeSearch.search(q, type, genre), 200);
         }
 
         if (path.startsWith("/qr-image/") && session.getMethod() == Method.GET) {
@@ -544,6 +545,30 @@ public class KtvHttpServer extends NanoWSD {
                 db.execSQL("INSERT INTO ktv_songs (code,youtube_id,title,requester,status,added_at) VALUES (?,?,?,?,'queued',?)",
                         new Object[]{code, action.optString("youtube_id"), action.optString("title"), requester, Db.nowIso()});
                 logActivity(db, code, requester + " added \"" + action.optString("title") + "\"");
+
+                // Auto-start playback if nothing is currently playing.
+                Cursor npCheck = db.rawQuery("SELECT now_playing_youtube_id FROM ktv_rooms WHERE code=?", new String[]{code});
+                boolean nothingPlaying = true;
+                if (npCheck.moveToFirst()) {
+                    nothingPlaying = Db.s(npCheck, "now_playing_youtube_id") == null;
+                }
+                npCheck.close();
+                if (nothingPlaying) {
+                    Cursor nextSong = db.rawQuery("SELECT youtube_id,title,requester FROM ktv_songs WHERE code=? AND status='queued' ORDER BY added_at ASC LIMIT 1", new String[]{code});
+                    if (nextSong.moveToFirst()) {
+                        String yid = Db.s(nextSong, "youtube_id");
+                        String title = Db.s(nextSong, "title");
+                        String req = Db.s(nextSong, "requester");
+                        nextSong.close();
+                        String now = Db.nowIso();
+                        db.execSQL("UPDATE ktv_rooms SET now_playing_youtube_id=?,now_playing_title=?,now_playing_requester=?,is_paused=0,position_sec=0,position_at=? WHERE code=?",
+                                new Object[]{yid, title, req, now, code});
+                        db.execSQL("UPDATE ktv_songs SET status='playing' WHERE code=? AND youtube_id=? AND status='queued'", new Object[]{code, yid});
+                        logActivity(db, code, "Now playing: " + title);
+                    } else {
+                        nextSong.close();
+                    }
+                }
                 pushSnapshot(db, code);
                 break;
             }

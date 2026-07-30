@@ -10,6 +10,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,25 @@ public class YoutubeSearch {
 
     private static final String KEY = "AIzaSyAO_FJ2Uqky0-A8a9X5d2q3QpF2Z1Y6Z2Y";
 
+    // Priority channels searched first for the general genre buttons
+    // (All, Duet, Rock, K-Pop, R&B).
+    private static final String[] GENERAL_PRIORITY_CHANNELS = {
+            "Atomic Karaoke", "Covers PH", "Pro Music Cover", "Karaoke All Stars",
+            "Global Karaoke TV", "KaraokeyTV", "Top Hits Karaoke"
+    };
+
+    // Priority channels for the Medley genre button.
+    private static final String[] MEDLEY_PRIORITY_CHANNELS = {
+            "Sing Along", "Ibara Music", "AP Music", "Cones Studio Karaoke",
+            "Zoom Karaoke", "Lariel Station"
+    };
+
+    // Priority channels for the OPM genre button.
+    private static final String[] OPM_PRIORITY_CHANNELS = {
+            "Sing Star Karaoke", "AJ Karaoke Cover", "Atomic Karaoke",
+            "Pro Music Cover", "Karaoke All-Star", "Top Hits Karaoke"
+    };
+
     private static class CacheEntry {
         long ts;
         JSONArray data;
@@ -34,9 +55,59 @@ public class YoutubeSearch {
     private static final long CACHE_TTL_MS = 5 * 60 * 1000;
 
     public static JSONArray search(String query, String type) {
+        return search(query, type, null);
+    }
+
+    public static JSONArray search(String query, String type, String genre) {
         String suffix = "live".equals(type) ? " live" : " karaoke";
         String fullQuery = query + suffix;
-        return innertubeSearch(fullQuery, 20);
+
+        String[] priorityChannels = pickPriorityChannels(genre);
+
+        List<JSONObject> merged = new ArrayList<>();
+        LinkedHashSet<String> seenIds = new LinkedHashSet<>();
+
+        if (priorityChannels != null) {
+            List<String> shuffled = new ArrayList<>(Arrays.asList(priorityChannels));
+            Collections.shuffle(shuffled);
+            for (String ch : shuffled) {
+                if (merged.size() >= 20) break;
+                JSONArray chResults = innertubeSearch(query + " " + ch + suffix, 3);
+                for (int i = 0; i < chResults.length() && merged.size() < 20; i++) {
+                    JSONObject r = chResults.optJSONObject(i);
+                    if (r == null) continue;
+                    String id = r.optString("id", "");
+                    if (id.isEmpty() || seenIds.contains(id)) continue;
+                    seenIds.add(id);
+                    merged.add(r);
+                }
+            }
+        }
+
+        if (merged.size() < 20) {
+            JSONArray general = innertubeSearch(fullQuery, 20);
+            for (int i = 0; i < general.length() && merged.size() < 20; i++) {
+                JSONObject r = general.optJSONObject(i);
+                if (r == null) continue;
+                String id = r.optString("id", "");
+                if (id.isEmpty() || seenIds.contains(id)) continue;
+                seenIds.add(id);
+                merged.add(r);
+            }
+        }
+
+        JSONArray out = new JSONArray();
+        for (JSONObject r : merged) out.put(r);
+        return out;
+    }
+
+    private static String[] pickPriorityChannels(String genre) {
+        if (genre == null || genre.isEmpty()) return GENERAL_PRIORITY_CHANNELS;
+        switch (genre.toLowerCase()) {
+            case "medley": return MEDLEY_PRIORITY_CHANNELS;
+            case "opm": return OPM_PRIORITY_CHANNELS;
+            default: return GENERAL_PRIORITY_CHANNELS;
+        }
     }
 
     public static JSONArray popular() {
