@@ -85,8 +85,6 @@ public class MainActivity extends AppCompatActivity {
         settings.setUseWideViewPort(true);
         settings.setAllowFileAccess(false);
 
-        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
-
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
@@ -274,26 +272,5 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         return super.onKeyDown(keyCode, event);
-    }
-
-    /** JS-callable bridge exposed to the web app as window.AndroidBridge. */
-    private class AndroidBridge {
-        @android.webkit.JavascriptInterface
-        public void openInYoutube(String videoId) {
-            runOnUiThread(() -> {
-                try {
-                    Intent appIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:" + videoId));
-                    appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(appIntent);
-                } catch (Exception e) {
-                    try {
-                        Intent webIntent = new Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://www.youtube.com/watch?v=" + videoId));
-                        webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(webIntent);
-                    } catch (Exception ignored) {}
-                }
-            });
-        }
     }
 }
