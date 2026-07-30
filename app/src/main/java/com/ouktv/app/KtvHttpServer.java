@@ -90,16 +90,24 @@ public class KtvHttpServer extends NanoWSD {
         String msg = payload.toString();
         for (KtvSocket ws : set) {
             try {
-                if (ws.getState() == WebSocket.State.OPEN) ws.send(msg);
+                if (ws.isOpen()) ws.send(msg);
             } catch (Exception ignored) {}
         }
     }
 
     // ---------- HTTP routing ----------
 
+    private static boolean isWsRequested(IHTTPSession session) {
+        String upgrade = session.getHeaders().get("upgrade");
+        String connection = session.getHeaders().get("connection");
+        boolean hasUpgrade = upgrade != null && upgrade.toLowerCase().contains("websocket");
+        boolean hasConnectionUpgrade = connection != null && connection.toLowerCase().contains("upgrade");
+        return hasUpgrade && hasConnectionUpgrade;
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
-        if (isWebSocketRequested(session)) {
+        if (isWsRequested(session)) {
             return super.serve(session);
         }
         String uri = session.getUri();
